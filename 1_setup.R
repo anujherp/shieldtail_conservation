@@ -3,7 +3,7 @@
 
 # Load and install required packages
 needed_packages <- c("tidyverse","sf", "raster","exactextractr", "terra", "rgdal", "geosphere",
-                     "rgeos", "ggrepel", "car", "ggextra", "red","scales", "ggpattern", "rlang")
+                     "rgeos", "ggrepel", "car", "ggextra", "red","scales","lwgeom", "ggpattern", "rlang")
 new.packages<-needed_packages[!(needed_packages %in% installed.packages()[,"Package"])]
 if(length(new.packages)) install.packages(new.packages)
 lapply(needed_packages, require, character.only = TRUE)
