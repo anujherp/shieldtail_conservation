@@ -12,15 +12,14 @@ rm(list=ls()); gc()
 # Download the datasets following instructions given on (ZENODO FILE)
 # make sure your parent folder is called 'shieldtail_conservation'.
 wd <- list()
-wd$data <- "G:/My Drive/Papers/1-work-in-progress/shieldtail distributions/24_April/shieldtail_conservation/dataframes/"
-wd$shapefiles <- "G:/My Drive/Papers/1-work-in-progress/shieldtail distributions/24_April/shieldtail_conservation/shapefiles/"
-wd$rasters <- "G:/My Drive/Papers/1-work-in-progress/shieldtail distributions/24_April/shieldtail_conservation/rasters/"
-wd$output <- "G:/My Drive/Papers/1-work-in-progress/shieldtail distributions/24_April/shieldtail_conservation/output/"
+wd$data <- ".../shieldtail_conservation/dataframes/"
+wd$shapefiles <- ".../shieldtail_conservation/shapefiles/"
+wd$rasters <- ".../shieldtail_conservation/rasters/"
+wd$output <- ".../shieldtail_conservation/output/"
 
 ## Turning of 'sf' package's spherical geometry feature
 # doing this will assume planar geometry when running vector map functions.
 sf::sf_use_s2(FALSE)
-
 
 ### Loading Required Datafiles.
 ## Indian map with political boundaries
@@ -41,6 +40,6 @@ protected_areas <- read_sf(paste0(wd$shapefiles, "pa_india.shp")) %>%
 
 ## Load raster layers (India DEM, built environment, Tree cover & loss)
 elevation <- raster(paste0(wd$rasters, "Ind_raster.tiff"))
-built <- terra::rast("D:/GIS files/Global_built_up_area/Built_area_and_change.tif")
-tree_cover <- raster("D:/GIS files/Forest loss Hansen et al 2013/pen_india_treecover.tif")
-tree_loss <- raster("D:/GIS files/Forest loss Hansen et al 2013/treecover_loss_bin.tif")
+built <- terra::rast(paste0(wd$rasters, "Built_area_and_change.tif"))
+tree_cover <- raster(paste0(wd$rasters, "pen_india_treecover.tif"))
+tree_loss <- raster(paste0(wd$rasters, "treecover_loss_bin.tif"))
