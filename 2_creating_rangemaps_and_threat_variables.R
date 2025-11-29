@@ -11,7 +11,7 @@ uro_list <- c("Melanophidium khairei","Platyplectrurus madurensis","Plectrurus p
 uro_plots <- list()
 uro_ranges <- list()
 i <- 0
-for (i in 10:length(uro_list)) {
+for (i in 1:length(uro_list)) {
   # Here, I fetch the occurrence data sheet stored in the dataframes folder.
   shieldtail_raw <- read_csv(paste0(wd$data,"shieldtail_records.csv")) %>% filter(scientific_name == uro_list[i])
   
@@ -133,7 +133,13 @@ for (i in 10:length(uro_list)) {
 
 ## Binding all list elements into a dataframe.
 # Below dataframe has range geometry information and variable values
-uro_ranges <- bind_rows(uro_ranges)
+
+uro_ranges <- bind_rows(uro_ranges1, uro_ranges)
+
 ## New sf dataframe containing range geometry information.
-uro_rangemaps <- uro_ranges %>% arrange(species) %>%
+uro_rangemaps <- uro_rangemaps %>% arrange(species) %>%
   dplyr::select(species, area_km, count)
+write_sf(uro_rangemaps, paste0(wd$shapefiles, "uro_ranges_new.shp"))
+uro_ranges <- st_drop_geometry(uro_ranges)
+write_csv(uro_ranges, paste0(wd$data, "uro_ranges_new.csv"))
+
