@@ -11,7 +11,7 @@ uro_list <- c("Melanophidium khairei","Platyplectrurus madurensis","Plectrurus p
 uro_plots <- list()
 uro_ranges <- list()
 i <- 0
-for (i in 1:length(uro_list)) {
+for (i in 10:length(uro_list)) {
   # Here, I fetch the occurrence data sheet stored in the dataframes folder.
   shieldtail_raw <- read_csv(paste0(wd$data,"shieldtail_records.csv")) %>% filter(scientific_name == uro_list[i])
   
@@ -54,7 +54,7 @@ for (i in 1:length(uro_list)) {
   tree_loss1 <- (resolution_meters^2) * (tree_loss1)
   
   ## We have taken a decision to split Uropeltis ellioti's range based on a hclustering threshold, this loop does that.
-  # Read the methods section for more infromation.
+  # Read the methods section for more information.
   if (shieldtail_long$scientific_name[1] == "Uropeltis ellioti") {
     uro_coord <- data.frame("name" = shieldtail_long$scientific_name, "longitude" = shieldtail_long$longitude, "latitude" = shieldtail_long$latitude)
     # Convert data to a SpatialPointsDataFrame object
@@ -102,7 +102,6 @@ for (i in 1:length(uro_list)) {
   ## The below lines compute the prevalence of threat parameters and other variables within the ranges
   pol <- pol %>% mutate(species = shieldtail_long$scientific_name[i],
                         area_km = round(as.numeric(st_area(pol$geometry)/1000000),3),
-                        aoo = aoo(shieldtail_long[, c("longitude", "latitude")]),
                         count = nrow(shieldtail_raw),
                         total_rm = sum(!is.na(shieldtail_raw$`dead/dor`)),
                         dor_count = sum(shieldtail_raw$`dead/dor` == "dor", na.rm = T),
@@ -125,7 +124,7 @@ for (i in 1:length(uro_list)) {
                         lost_cov = round(exact_extract(tree_loss1, st_as_sf(pol), fun=                                                       c('sum'))/1000000,3),
                         lost_covp = round((lost_cov/tree_cov)*100,3),
   ) %>%
-    dplyr::select(species, area_km, aoo, count, total_rm, dor_count, dor_prop, PA_cov, NPA_covp, WG_cov, WG_covp, b_stb_cov, b_exp_cov, b_exp_covp, tree_cov, tree_covp, lost_cov, lost_covp, geometry)
+    dplyr::select(species, area_km, count, total_rm, dor_count, dor_prop, PA_cov, NPA_covp, WG_cov, WG_covp, b_stb_cov, b_exp_cov, b_exp_covp, tree_cov, tree_covp, lost_cov, lost_covp, geometry)
   
   uro_ranges[[i]] <- pol
   print(i)
@@ -135,7 +134,6 @@ for (i in 1:length(uro_list)) {
 ## Binding all list elements into a dataframe.
 # Below dataframe has range geometry information and variable values
 uro_ranges <- bind_rows(uro_ranges)
-
 ## New sf dataframe containing range geometry information.
 uro_rangemaps <- uro_ranges %>% arrange(species) %>%
   dplyr::select(species, area_km, count)
