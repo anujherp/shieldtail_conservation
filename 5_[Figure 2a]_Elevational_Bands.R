@@ -19,8 +19,7 @@ uro_list <- c("Melanophidium khairei","Platyplectrurus madurensis","Plectrurus p
 point_elev_df <- shieldtail_raw %>% drop_na(latitude) %>%
   filter(scientific_name %in% uro_list) %>%
   st_as_sf(coords = c("longitude", "latitude"), crs = 4326) %>%
-  st_buffer(dist = 0.0097) %>% #Arc degrees, creates a buffer of ~3.5 sq km, radius 1km
-  st_convex_hull() %>% st_intersection(shoreline) %>% dplyr::select(scientific_name)
+  dplyr::select(scientific_name)
 
 # Extracting the elevation values of all point data
 point_elev_df <- point_elev_df %>%
@@ -38,6 +37,107 @@ point_elev_csv <- point_elev_df %>%
 
 #### POLYGON DATA
 # Here, I am extracting elevation variables from the polygon.
+
+# Convert polygon to Spatial for raster::mask/crop
+poly_sp <- as(uro_rangemaps, "Spatial")
+uro_points <- st_coordinates()
+# Extract elevation at points
+pt_elev <- raster::extract(elevation, as(point_elev_df, "Spatial"))
+pt_var  <- var(pt_elev, na.rm = TRUE)
+pt_var
+
+
+uro_sp <- as(uro_rangemaps, "Spatial") #convert the sf df to a spatpoly
+rpts <- list(); rpts_sf <- list()
+for (i in seq_along(uro_list)) {
+  poly_i <- uro_sp[i,] 
+  r_i <- raster::crop(elevation, poly_i)
+  rpts <- rasterToPoints(mask(r_i, poly_i), spatial = TRUE)
+  rpts_sf[[i]] <- st_as_sf(rpts)
+} ## crop and mask the elevation layer to each of the species polygons
+
+# Thin to reduce spatial autocorrelation
+set.seed(123)
+thin_sf <- list()
+df <- data.frame(st_coordinates(rpts_sf[[i]][["geometry"]]), SPEC ="Poly")
+for (i in 1:seq_along(uro_list)) {
+  thin_out <- thin(
+    loc.data = df,
+    lat.col = "Y",
+    long.col = "X",
+    spec.col = "SPEC",
+    thin.par = 2000,     # 5 km thinning radius
+    reps = 1,          # one thinned set is enough
+    write.files = FALSE,
+    verbose = FALSE
+  )
+  
+  sightings_thinned = spThin::thin(df, 
+                                   lat.col = "Y", 
+                                   long.col = "X", 
+                                   spec.col = "SPEC", 
+                                   thin.par = 10, 
+                                   reps = 100, 
+                                   locs.thinned.list.return = TRUE, 
+                                   write.files = F, 
+                                   write.log.file = FALSE)[[1]]#try thinning at different scales
+  plot(sightings_thinned)
+  plot(df$X,df$Y)
+}
+
+# Extract coordinates of thinned points
+thin_indices <- thin_sf[[1]]$SampleID
+thin_pts <- rpts_sf[thin_indices,]
+
+# Get de-autocorrelated raster values
+thin_vals <- thin_pts$layer
+
+
+
+
+## Create a list with the elevation values and corresponding coordinates for each polygon
+moran_results <- list()
+for (i in seq_along(pol_elev)) {
+  
+  r <- pol_elev[[i]]
+  # get values and coordinates
+  vals <- getValues(r)
+  coords <- xyFromCell(r, 1:ncell(r))
+  
+  # remove NA cells
+  ok <- !is.na(vals)
+  vals <- vals[ok]
+  coords <- coords[ok, ]
+  
+  # store for downstream Moran’s I
+  moran_results[[i]] <- list(values = vals, coords = coords)
+}
+
+## Build spatial weights using k-nearest neighbour, and compute the Moran's I
+
+for (i in seq_along(moran_results[1:3])) {
+  vals  <- moran_results[[i]]$values
+  coords <- moran_results[[i]]$coords
+  
+  # Build 8-nearest neighbor graph
+  knn <- spdep::knearneigh(coords, k = 8)
+  nb <- spdep::knn2nb(knn)
+  lw <- spdep::nb2listw(nb, style = "W")
+  
+  # Moran's I test
+  m_test <- spdep::moran.test(vals, lw)
+  
+  moran_results[[i]]$moran <- m_test
+}
+
+
+
+
+
+
+
+
+
 pol_elev_df <- extract(elevation, uro_rangemaps)
 names(pol_elev_df) <- uro_list
 
