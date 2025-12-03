@@ -15,17 +15,24 @@ uro_list <- c("Melanophidium khairei","Platyplectrurus madurensis","Plectrurus p
               "Uropeltis myhendrae","Uropeltis pulneyensis","Uropeltis rubrolineata")
 
 #### POINT DATA
+
 # Here I am isolating geographic point information from the dataframe
-point_elev_df <- shieldtail_raw %>% drop_na(latitude) %>%
+# Extracting the elevation values of all point data
+pts <- shieldtail_raw %>%
+  drop_na(latitude) %>%
   filter(scientific_name %in% uro_list) %>%
   st_as_sf(coords = c("longitude", "latitude"), crs = 4326) %>%
-  dplyr::select(scientific_name)
-
-# Extracting the elevation values of all point data
-point_elev_df <- point_elev_df %>%
-  mutate(point_elev = round(exactextractr::exact_extract(elevation, st_as_sf(point_elev_df),fun= c('mean')),3),
-         species = paste0(substr(scientific_name, 1, 1),". ", word(scientific_name, 
-         start = 2, sep=" "))) %>% st_drop_geometry() %>% dplyr::select(-scientific_name)
+  mutate(
+    point_elev = round(
+      raster::extract(elevation,.,),
+      3
+    ),
+    species = paste0(
+      substr(scientific_name, 1, 1), ". ",
+      stringr::word(scientific_name, start = 2, sep = " ")
+    )
+  ) %>%
+  st_drop_geometry()
 
 # This dataframe is for exporting the point values as a csv.
 point_elev_csv <- point_elev_df %>%
@@ -39,119 +46,90 @@ point_elev_csv <- point_elev_df %>%
 # Here, I am extracting elevation variables from the polygon.
 
 # Convert polygon to Spatial for raster::mask/crop
-poly_sp <- as(uro_rangemaps, "Spatial")
-uro_points <- st_coordinates()
-# Extract elevation at points
-pt_elev <- raster::extract(elevation, as(point_elev_df, "Spatial"))
-pt_var  <- var(pt_elev, na.rm = TRUE)
-pt_var
-
-
 uro_sp <- as(uro_rangemaps, "Spatial") #convert the sf df to a spatpoly
-rpts <- list(); rpts_sf <- list()
+
+rpts_thinned <- setNames(vector("list", length(uro_list)), uro_list)
+rpts_draw    <- setNames(vector("list", length(uro_list)), uro_list)
+
+set.seed(125)
+
 for (i in seq_along(uro_list)) {
-  poly_i <- uro_sp[i,] 
-  r_i <- raster::crop(elevation, poly_i)
-  rpts <- rasterToPoints(mask(r_i, poly_i), spatial = TRUE)
-  rpts_sf[[i]] <- st_as_sf(rpts)
-} ## crop and mask the elevation layer to each of the species polygons
-
-# Thin to reduce spatial autocorrelation
-set.seed(123)
-thin_sf <- list()
-df <- data.frame(st_coordinates(rpts_sf[[i]][["geometry"]]), SPEC ="Poly")
-for (i in 1:seq_along(uro_list)) {
-  thin_out <- thin(
-    loc.data = df,
-    lat.col = "Y",
-    long.col = "X",
-    spec.col = "SPEC",
-    thin.par = 2000,     # 5 km thinning radius
-    reps = 1,          # one thinned set is enough
-    write.files = FALSE,
-    verbose = FALSE
+  
+  ## 1. Crop + mask raster to polygon
+  poly_i <- uro_sp[i, ]
+  r_i    <- raster::crop(elevation, poly_i)
+  r_m    <- raster::mask(r_i, poly_i)
+  
+  ## 2. Raster → points → sf
+  r_sf <- data.frame(st_as_sf(rasterToPoints(r_m, spatial = TRUE))) %>%
+    rename(elevation = Ind_raster)
+  
+  # ## 3. Thin spatial clustering (round coords & dedupe)
+  # df <- r_sf %>%
+  #   st_coordinates() %>%
+  #   as.data.frame() %>%
+  #   mutate(
+  #     X = round(X, 2),
+  #     Y = round(Y, 2),
+  #     point = st_as_sf(coords = c("X", "Y"), crs = 4326)
+  #   ) %>%
+  #   distinct(X, Y, .keep_all = TRUE)
+  
+  rpts_thinned[[i]] <- r_sf
+  
+  ## 4. Random sampling (100 samples, each size = species count)
+  draw_n <- sum(pts$scientific_name == uro_list[i])
+  
+  rpts_draw[[i]] <- replicate(
+    100,
+    r_sf[sample(nrow(r_sf), draw_n, replace = T), ],
+    simplify = FALSE
   )
-  
-  sightings_thinned = spThin::thin(df, 
-                                   lat.col = "Y", 
-                                   long.col = "X", 
-                                   spec.col = "SPEC", 
-                                   thin.par = 10, 
-                                   reps = 100, 
-                                   locs.thinned.list.return = TRUE, 
-                                   write.files = F, 
-                                   write.log.file = FALSE)[[1]]#try thinning at different scales
-  plot(sightings_thinned)
-  plot(df$X,df$Y)
+  print(i)
 }
+rpts_df <- rpts_draw %>% 
+  map(~ bind_rows(.x, .id = "replicate")) %>%   # bind 100 replicate data.frames per species
+  bind_rows(.id = "species") %>% dplyr::select(-geometry)
 
-# Extract coordinates of thinned points
-thin_indices <- thin_sf[[1]]$SampleID
-thin_pts <- rpts_sf[thin_indices,]
+var_dist <- rpts_df %>%
+  group_by(species, replicate) %>%
+  summarise(var = var(elevation), .groups = "drop")
 
-# Get de-autocorrelated raster values
-thin_vals <- thin_pts$layer
+point_var <- pts %>% mutate(species = scientific_name) %>%
+  group_by(species) %>%
+  summarise(var = var(point_elev))
 
+test_df <- left_join(var_dist, point_var, by = "species", 
+                     suffix = c("_poly", "_points"))
+results <- test_df %>%
+  group_by(species) %>%
+  summarise(
+    ttest_p = t.test(var_points, mu = var_poly)$p.value,
+    ttest_t = t.test(var_points, mu = var_poly)$statistic,
+    mean_poly = mean(var_poly),
+    point_var = unique(var_points)
+  )
 
-
-
-## Create a list with the elevation values and corresponding coordinates for each polygon
-moran_results <- list()
-for (i in seq_along(pol_elev)) {
+for (sp in unique(test_df$species)) {
   
-  r <- pol_elev[[i]]
-  # get values and coordinates
-  vals <- getValues(r)
-  coords <- xyFromCell(r, 1:ncell(r))
+  df_sp <- test_df %>% filter(species == sp)
   
-  # remove NA cells
-  ok <- !is.na(vals)
-  vals <- vals[ok]
-  coords <- coords[ok, ]
+  p <- ggplot(df_sp, aes(x = var_poly)) +
+    geom_histogram(binwidth = 5000, fill = "skyblue", color = "black") +
+    geom_vline(aes(xintercept = var_points[1]), color = "red", size = 1.2) +
+    theme_minimal() +
+    labs(
+      x = "Polygon replicate variance",
+      y = "Count",
+      title = paste0("Variance distribution for ", sp),
+      subtitle = "Red line = observed point variance"
+    )
   
-  # store for downstream Moran’s I
-  moran_results[[i]] <- list(values = vals, coords = coords)
+  print(p)  # display in R session
+  
+  # Optional: save to file
+  # ggsave(filename = paste0("species_histograms/", sp, ".png"), plot = p, width = 6, height = 4)
 }
-
-## Build spatial weights using k-nearest neighbour, and compute the Moran's I
-
-for (i in seq_along(moran_results[1:3])) {
-  vals  <- moran_results[[i]]$values
-  coords <- moran_results[[i]]$coords
-  
-  # Build 8-nearest neighbor graph
-  knn <- spdep::knearneigh(coords, k = 8)
-  nb <- spdep::knn2nb(knn)
-  lw <- spdep::nb2listw(nb, style = "W")
-  
-  # Moran's I test
-  m_test <- spdep::moran.test(vals, lw)
-  
-  moran_results[[i]]$moran <- m_test
-}
-
-
-
-
-
-
-
-
-
-pol_elev_df <- extract(elevation, uro_rangemaps)
-names(pol_elev_df) <- uro_list
-
-pol_elev_df <- pol_elev_df %>% 
-  unlist(use.names = T) %>%
-  as.data.frame()
-pol_elev_df$species <- rownames(pol_elev_df)
-rownames(pol_elev_df) <- NULL
-colnames(pol_elev_df) <- c("pol_elev", "species")
-
-pol_elev_df <-  pol_elev_df %>% mutate(species = gsub('[[:digit:]]+', '',species)) %>%
-  dplyr::select(species, pol_elev) %>% mutate(species = paste0(substr(species, 1, 1),". ", word(species, start = 2, sep=" ")))
-
-pol_elev_df <- pol_elev_df %>% mutate(species = fct_reorder(species, pol_elev, .fun = min, .desc = F))
 
 # This dataframe is for exporting the polygonal values as a csv.
 pol_elev_csv <- pol_elev_df %>%
@@ -163,7 +141,6 @@ pol_elev_csv <- pol_elev_df %>%
 
 ## A dataframe containing both point and polygonal elevation values.
 elev_csv <- left_join(point_elev_csv, pol_elev_csv, by = c("species"))
-
 
 ## Plotting a violine plot (Figure 2a)
 
