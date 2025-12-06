@@ -22,21 +22,13 @@ pts <- shieldtail_raw %>%
   drop_na(latitude) %>%
   filter(scientific_name %in% uro_list) %>%
   st_as_sf(coords = c("longitude", "latitude"), crs = 4326) %>%
-  mutate(
-    point_elev = round(
-      raster::extract(elevation,.,),
-      3
-    ),
-    species = paste0(
-      substr(scientific_name, 1, 1), ". ",
-      stringr::word(scientific_name, start = 2, sep = " ")
-    )
-  ) %>%
+  mutate(point_elev = round(
+      raster::extract(elevation,.,),3)) %>%
   st_drop_geometry()
 
 # This dataframe is for exporting the point values as a csv.
-point_elev_csv <- point_elev_df %>%
-  group_by(species) %>%
+point_elev_csv <- pts %>%
+  group_by(scientific_name) %>%
   summarise(min_alt = min(point_elev),
             max_alt = max(point_elev),
             med_alt = median(point_elev),
@@ -51,7 +43,7 @@ uro_sp <- as(uro_rangemaps, "Spatial") #convert the sf df to a spatpoly
 rpts_thinned <- setNames(vector("list", length(uro_list)), uro_list)
 rpts_draw    <- setNames(vector("list", length(uro_list)), uro_list)
 
-set.seed(125)
+set.seed(130)
 
 for (i in seq_along(uro_list)) {
   
@@ -64,72 +56,120 @@ for (i in seq_along(uro_list)) {
   r_sf <- data.frame(st_as_sf(rasterToPoints(r_m, spatial = TRUE))) %>%
     rename(elevation = Ind_raster)
   
-  # ## 3. Thin spatial clustering (round coords & dedupe)
-  # df <- r_sf %>%
-  #   st_coordinates() %>%
-  #   as.data.frame() %>%
-  #   mutate(
-  #     X = round(X, 2),
-  #     Y = round(Y, 2),
-  #     point = st_as_sf(coords = c("X", "Y"), crs = 4326)
-  #   ) %>%
-  #   distinct(X, Y, .keep_all = TRUE)
-  
   rpts_thinned[[i]] <- r_sf
   
-  ## 4. Random sampling (100 samples, each size = species count)
+  ## 3. Random sampling (1000 samples, each size = species count)
   draw_n <- sum(pts$scientific_name == uro_list[i])
   
   rpts_draw[[i]] <- replicate(
-    100,
+    1000,
     r_sf[sample(nrow(r_sf), draw_n, replace = T), ],
     simplify = FALSE
   )
   print(i)
 }
+
 rpts_df <- rpts_draw %>% 
-  map(~ bind_rows(.x, .id = "replicate")) %>%   # bind 100 replicate data.frames per species
-  bind_rows(.id = "species") %>% dplyr::select(-geometry)
+  map(~ bind_rows(.x, .id = "replicate")) %>%   # bind 1000 replicate data.frames per species
+  bind_rows(.id = "species") %>%
+  mutate(replicate = as.numeric(replicate)) %>%
+  dplyr::select(-geometry)
 
-var_dist <- rpts_df %>%
-  group_by(species, replicate) %>%
-  summarise(var = var(elevation), .groups = "drop")
+pts <- pts %>% rename(elevation = point_elev, species = scientific_name) %>%
+  mutate(replicate = 0) %>% dplyr::select(species, replicate, elevation)
 
-point_var <- pts %>% mutate(species = scientific_name) %>%
-  group_by(species) %>%
-  summarise(var = var(point_elev))
+elev_df <- bind_rows(rpts_df, pts) %>% mutate(source = case_when(replicate<1 ~ "point",
+                                                                 replicate>0 ~ "polygon"))
+## levene-test
 
-test_df <- left_join(var_dist, point_var, by = "species", 
-                     suffix = c("_poly", "_points"))
-results <- test_df %>%
-  group_by(species) %>%
-  summarise(
-    ttest_p = t.test(var_points, mu = var_poly)$p.value,
-    ttest_t = t.test(var_points, mu = var_poly)$statistic,
-    mean_poly = mean(var_poly),
-    point_var = unique(var_points)
-  )
-
-for (sp in unique(test_df$species)) {
+levene_bootstrap_species <- function(df_species) {
   
-  df_sp <- test_df %>% filter(species == sp)
+  # separate point & polygon elevations
+  obs <- df_species %>% filter(source == "point")
+  poly <- df_species %>% filter(source == "polygon")
   
-  p <- ggplot(df_sp, aes(x = var_poly)) +
-    geom_histogram(binwidth = 5000, fill = "skyblue", color = "black") +
-    geom_vline(aes(xintercept = var_points[1]), color = "red", size = 1.2) +
+  # storage for 1000 tests
+  lev_stats <- vector("list", 1000)
+  
+  for (i in 1:1000) {
+    
+    poly_i <- poly %>% filter(replicate == i)
+    
+    # combine obs + polygon replicate i 
+    df_i <- bind_rows(obs, poly_i)
+    
+    # run Levene test
+    lev <- leveneTest(elevation ~ source, data = df_i)
+    
+    lev_stats[[i]] <- tibble(
+      replicate = i,
+      F_value = lev$`F value`[1],
+      df_num = lev$Df[1],
+      df_den = lev$Df[2],
+      p_value = lev$`Pr(>F)`[1]
+    )
+  }
+  
+  lev_df <- bind_rows(lev_stats)
+  
+  # summary across 1000 replicates
+  summary_row <- lev_df %>%
+    summarise(
+      mean_F = round(mean(F_value),3),
+      mean_p = round(mean(p_value),3),
+      prop_p_less_0.05 = round(mean(p_value < 0.05),3)
+    ) %>%
+    mutate(
+      species = unique(df_species$species))
+  
+  return(summary_row)
+}
+
+levene_bootstrap_results <- elev_df %>%
+  group_by(species) %>%
+  group_modify(~ levene_bootstrap_species(.x)) %>%
+  ungroup()
+
+## Plotting a box and whiskers plot (Figues S2)
+elevation_box <- ggplot() +
+  geom_boxplot(data= elev_df, aes(x = species, y = elevation, fill = source),
+               outlier.size = 5, lwd = 2, coef = 2, show.legend = F) +
+  labs(x = "Species",
+       y = "Elevation [m]") +
+  theme_bw(base_size = 60) +
+  scale_x_discrete(labels = c("M. khairei","P. madurensis","P. perroteti",
+                              "R. karinthandani","R. melanoleucus","T. hewstoni",
+                              "T. sanguineus","U. ellioti","U. maculata",
+                              "U. myhendrae","U. pulneyensis","U. rubrolineata"),
+    guide = guide_axis(n.dodge = 2)) +
+  geom_text(data = levene_bootstrap_results, 
+            aes(x = species, y = max(elev_df$elevation) + 10, 
+                label = paste("p =", round(mean_p, 3))),
+            color = "maroon", size = 15) +
+  theme(axis.text.x = element_text(face = "italic"))
+
+## Saving the plot as a jpeg file.
+ggsave(elevation_box, filename = paste0(wd$output,"Elevation_Box_n.png"), width = 1200, 
+       height = 800, units = "mm", device='png', dpi=500)
+
+p <- list()
+for (sp in unique(elev_df$species)) {
+  
+  df_sp <- elev_df %>% filter(species == sp)
+  
+  p[[sp]] <- ggplot(df_sp, aes(x = elevation)) +
+    geom_histogram(binwidth = 50, fill = "skyblue", color = "black") +
+    geom_vline(aes(xintercept = mean(elevation[source == "point"])), color = "red", size = 1.2) +
     theme_minimal() +
     labs(
-      x = "Polygon replicate variance",
+      x = "Elevation",
       y = "Count",
-      title = paste0("Variance distribution for ", sp),
-      subtitle = "Red line = observed point variance"
-    )
-  
-  print(p)  # display in R session
-  
-  # Optional: save to file
-  # ggsave(filename = paste0("species_histograms/", sp, ".png"), plot = p, width = 6, height = 4)
-}
+      title = paste0(sp),
+      subtitle = "Red line = observed mean elevation",
+      size = 2)
+  }
+combined_plot <- wrap_plots(p, ncol = 3)   # like facet_wrap
+
 
 # This dataframe is for exporting the polygonal values as a csv.
 pol_elev_csv <- pol_elev_df %>%
@@ -142,11 +182,14 @@ pol_elev_csv <- pol_elev_df %>%
 ## A dataframe containing both point and polygonal elevation values.
 elev_csv <- left_join(point_elev_csv, pol_elev_csv, by = c("species"))
 
-## Plotting a violine plot (Figure 2a)
+## Plotting a violin plot (Figure 2a)
+
+rpts_elevation <- bind_rows(rpts_thinned, .id="species") %>% 
+  dplyr::select(-geometry)
 
 ggplot() +
-  geom_violin(data = pol_elev_df, aes(x = species, y= pol_elev), fill = alpha("#3f8f29", 0.6), trim = T, scale = "width", adjust = 0.3, show.legend = F, lwd = 2) +
-  geom_point(data = point_elev_df, aes(x = species, y = point_elev), fill = "#056517", size = 9, pch = 21, show.legend = F) +
+  geom_violin(data = rpts_elevation, aes(x = species, y= elevation), fill = alpha("#3f8f29", 0.6), trim = T, scale = "width", adjust = 0.3, show.legend = F, lwd = 2) +
+  geom_point(data = subset(elev_df, source == "point"), aes(x = species, y = elevation), fill = "#056517", size = 9, pch = 21, show.legend = F) +
   scale_y_continuous(breaks=seq(0,2400,300), limits = c(0, 2570)) +
   # scale_x_discrete(guide = guide_axis(n.dodge = 2)) +
   labs(x = "Species", y = "Elevation [m]") +
