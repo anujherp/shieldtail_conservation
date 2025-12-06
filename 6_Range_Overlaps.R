@@ -1,4 +1,4 @@
-## Script 6: This chunk computes range overlaps between shieldtail ranges from different sources (See methods).
+## Script 6: Calculating range size and position overlaps b/w IUCN, SMP, and GARD.
 
 # List of shieldtail species of interest.
 uro_list <- c("Melanophidium khairei","Platyplectrurus madurensis","Plectrurus perroteti",
@@ -7,7 +7,8 @@ uro_list <- c("Melanophidium khairei","Platyplectrurus madurensis","Plectrurus p
               "Uropeltis myhendrae","Uropeltis pulneyensis","Uropeltis rubrolineata")
 
 # Load the range maps (SMP, IUCN, and GARD).
-uro_iucn <- read_sf(paste0(wd$shapefiles,"uro_iucn.shp")) %>% filter(species %in% uro_list)
+uro_iucn <- read_sf(paste0(wd$shapefiles,"uro_iucn.shp")) %>% filter(species %in% uro_list) %>% 
+  mutate(species = paste0(substr(species, 1, 1),". ",word(species, start = 2, sep=" ")))
 uro_gard <- read_sf(paste0(wd$shapefiles,"uropeltid_gard.shp")) %>% filter(binomial %in% uro_list)
 uro_rangemaps <- read_sf(paste0(wd$shapefiles,"uro_ranges.shp")) %>% filter(species %in% uro_iucn$species) %>%
   arrange(species)
