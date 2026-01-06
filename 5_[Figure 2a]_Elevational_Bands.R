@@ -119,7 +119,7 @@ elevation_box <- ggplot() +
                outlier.size = 5, lwd = 2, coef = 2, show.legend = F) +
   labs(x = "Species",
        y = "Elevation [m]") +
-  theme_bw(base_size = 60) +
+  theme_bw(base_size = 70) +
   scale_x_discrete(guide = guide_axis(n.dodge = 2)) +
   geom_text(data = levene_bootstrap_results, 
             aes(x = species, y = max(elev_df$elevation) + 10, 
@@ -136,23 +136,24 @@ ggsave(elevation_box, filename = paste0(wd$output,"Elevation_Box_n.png"), width 
 rpts_elevation <- bind_rows(rpts_thinned, .id = "species") %>%
   dplyr::select(-geometry) %>%
   mutate(species = fct_reorder(species, elevation,
-                               .fun = min, .desc = FALSE))
+                               .fun = min, .desc = F))
 
 elev_df$species <- factor(elev_df$species, levels = levels(rpts_elevation$species))
 
 # Plot a violin graph, with occurrence points overlayed.
 violin <- ggplot() +
-  geom_violin(data = rpts_elevation, aes(x = species, y= elevation), fill = alpha("#3f8f29", 0.6), trim = T, scale = "width", adjust = 0.3, show.legend = F, lwd = 2) +
+  geom_violin(data = rpts_elevation, aes(x = species, y= elevation), fill = alpha("#3f8f29", 0.5), trim = T, scale = "width", adjust = 0.3, show.legend = F, lwd = 2) +
   geom_point(data = subset(elev_df, source == "point"), aes(x = species, y = elevation), fill = "#056517", size = 11, pch = 21, show.legend = F) +
-  scale_y_continuous(breaks=seq(0,2400,300), limits = c(0, 2570)) +
+  scale_y_continuous(breaks=seq(0,2400,300), limits = c(0, 2530)) +
   labs(x = "Species", y = "Elevation [m]") +
-  coord_flip() +
-  theme_linedraw(base_size = 60) +
-  theme(axis.text.y = element_text(face = "italic", size = 62))
-
+  # coord_flip() +
+  theme_bw(base_size = 70) +
+  theme(
+    axis.text.x = element_text(angle = 30, hjust = 0.75, vjust = 0.9, face = "italic")
+  )
 # save the plot as a jpeg file
-ggsave(violin, filename = "elevation_plots_n.jpg",path = paste0(wd$output), width = 900, 
-       height = 1200, units = "mm", device='jpeg', dpi=300)
+ggsave(violin, filename = "elevation_plots_n.png",path = paste0(wd$output), width = 750, 
+       height = 1000, units = "mm", device='png', dpi=400)
 
 ## creating Table (S5)
 # This dataframe is for exporting the point values as a csv.
@@ -173,4 +174,5 @@ pol_elev_csv <- rpts_elevation %>%
 
 ## A dataframe containing both point and polygonal elevation values.
 elev_csv <- left_join(point_elev_csv, pol_elev_csv, by = c("species"),
-                      suffix = c("_point", "_polygon"))
+                      suffix = c("_point", "_polygon")) %>% mutate(across(2:9, ~round(.x,0)))
+write_csv(elev_csv, paste0(wd$data, "elev_summary.csv"))

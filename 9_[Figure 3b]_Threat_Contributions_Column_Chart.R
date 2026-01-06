@@ -36,32 +36,37 @@ sec_axis_transform <- function(y) {
 # Define z-score breaks manually (adjust as needed)
 z_breaks <- seq(floor(z_min), ceiling(z_max), by = 0.5)  # Example: Breaks every 0.5
 
-# Create the stacked bar plot with different patterns (Figure 3B)
-threat_plot <- ggplot(threat_cont, aes(x = species, y = val, pattern = threat, fill = threat_cat)) +
-  geom_bar_pattern(stat = "identity", width = 0.75,
-                   color = "black", 
-                   lwd = 3,
-                   pattern_fill = "black",
-                   pattern_angle = 45,
-                   pattern_density = 0.1,
-                   pattern_spacing = 0.01,
-                   pattern_key_scale_factor = 0.6,
-                   pattern_alpha = 0.8,
-                   show.legend = F) +
-  scale_fill_manual(values = c("H" = "#E57373",
-                               "L"= "#81C784",
-                               "M"= "#FFB74D")) +
-  scale_pattern_shape_manual(values = c("npa_cont" = "crosshatch", 
-                                        "built_cont" = "polka dot", 
-                                        "treeloss_cont" = "stripes")) +
-  labs(x = "Species",
-       y = "Threat Score") +
-  scale_x_discrete(guide = guide_axis(n.dodge = 2)) +
-  scale_y_continuous(breaks = seq(0, 30, 3), limits = c(0, 30),
-                     sec.axis = sec_axis(~ sec_axis_transform(.), name = "Z-statistic")) +
-  theme_linedraw(base_size = 15) +
-  theme(axis.text.x = element_text(angle = 0, hjust = 0.5, face = "italic"))
+
+threat_plot <- ggplot(threat_cont, aes(x = species, y = val, fill = threat)) +
+  geom_bar(
+    stat = "identity",
+    width = 0.75,
+    color = "#57595B",
+    lwd = 3,
+    alpha = 0.95,
+    show.legend = F
+  ) +
+  scale_fill_manual(values = c(
+    "npa_cont"      = "#658C58",   # or any colour scheme you prefer
+    "built_cont"    = "#F0E491",
+    "treeloss_cont" = "#BBC863"
+  )) +
+  labs(
+    x = "Species",
+    y = "Threat Score",
+    fill = "Threat Type"
+  ) +
+  # scale_x_discrete(guide = guide_axis(n.dodge = 2)) +
+  scale_y_continuous(
+    breaks = seq(0, 30, 3),
+    limits = c(0, 30),
+    sec.axis = sec_axis(~ sec_axis_transform(.), name = "Z-statistic")
+  ) +
+  theme_bw(base_size = 70) +
+  theme(
+    axis.text.x = element_text(angle = 30, hjust = 0.75, vjust = 0.9, face = "italic")
+  )
 
 # Saving the plot as a jpeg file.
-ggsave(threat_plot, filename = "threat_cont.jpg",path = paste0(wd$output), width = 1250, 
-       height = 1150, units = "mm", device='jpeg', dpi=300)
+ggsave(threat_plot, filename = "threat_cont.png",path = paste0(wd$output), width = 700, 
+       height = 800, units = "mm", device='png', dpi=500)

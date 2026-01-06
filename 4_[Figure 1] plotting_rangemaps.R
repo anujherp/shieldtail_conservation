@@ -46,7 +46,7 @@ lats <- c(bbox[2], bbox[4])
 lats_breaks <- round(seq(bbox[2], bbox[4], length.out = 5),1)
 
 # Plot occurrences and convex hull
-ggplot() +
+map_fig <- ggplot() +
   # Background: Shoreline and India
   geom_sf(data = shoreline, colour = "#3b3b3b", fill = "#F5F5F5", alpha = 0.95, lwd = 1) +
   geom_sf(data = sf_india, colour = "#3b3b3b", fill = "#F5F5F5", alpha = 1, lwd = 2) +
@@ -54,6 +54,7 @@ ggplot() +
   # Species range layers
   geom_sf(data = uro_gard, fill = "#FFB31A", colour = "black", alpha = 0.65, lwd = 0) +
   geom_sf(data = uro_iucn, fill = "#de1a24", colour = "black", alpha = 0.65, lwd = 0) +
+  
   geom_sf(data = uro_rangemaps, fill = "#3f8f29", colour = "black", alpha = 0.65, lwd = 0) +
   
   # Species points
@@ -75,10 +76,11 @@ ggplot() +
   scale_y_continuous(breaks = lats_breaks) +
   
   # Themes
-  theme_bw(base_size = 15) +
+  theme_bw(base_size = 70) +
   labs(x = NULL, y = NULL) +
   theme(
     axis.text.y = element_text(angle = 90, hjust = 0.5),
+    axis.text.x = element_text(size = 40),
     axis.ticks.length = unit(0.3, "cm"),
     panel.background = element_rect(fill = "lightblue"),
     plot.margin = margin(15, 15, 15, 15),
@@ -86,7 +88,7 @@ ggplot() +
   )
 
 ## Save the plot as a JPEG file.
-ggsave(filename = paste0(wd$output,paste0("IUCN_GARD&SMP comparison/", 
+ggsave(map_fig,filename = paste0(wd$output,paste0("IUCN_GARD&SMP comparison/", 
        substr(shieldtail_long$scientific_name[1], 1, 1),"_", word(shieldtail_long$scientific_name[1],
-       start = 2,sep=" ")),"_w_IUCN&GARD.jpg"), width = 800, height = 800, units = "mm",
-       device='jpg', dpi=300)
+       start = 2,sep=" ")),"_w_IUCN&GARD.png"), width = 800, height = 800, units = "mm",
+       device='png', dpi=400)
