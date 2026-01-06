@@ -68,10 +68,33 @@ elev_df <- bind_rows(rpts_df, pts) %>%
   mutate(source = case_when(replicate==0 ~ "point",
                             replicate>0 ~ "polygon"))
 ## Group these data by species and replicates, and compute variances for each set.
-elev_df_var <- elev_df %>% 
+elev_rangediff <- elev_df %>% 
   group_by(species, replicate, source) %>%
-  summarise(sample_variances = var(elevation),
+  summarise(elevational_range = max(elevation) - min(elevation),
               .groups = "drop")
+
+elev_rangediff_ci <-  elev_rangediff %>%
+  group_by(species) %>%
+  summarise(
+    obs_elev_range = elevational_range[replicate == 0],
+    ci_low  = quantile(elevational_range[replicate > 0], 0.025),
+    ci_high = quantile(elevational_range[replicate > 0], 0.975),
+    within_95 = obs_elev_range >= ci_low & obs_elev_range <= ci_high,
+      .groups = "drop")
+
+### Test statistic using the t.test formula.
+testing_elev_rangediff <- elev_rangediff %>%
+  group_by(species) %>%
+  summarise(
+    ttest = list(
+      t.test(
+        x  = elevational_range[replicate > 0],  # random sample distribution
+        mu = elevational_range[replicate == 0]  # observed range
+      )
+    ),
+    t_stat  = round(ttest[[1]]$statistic, 5),
+    p_value = round(ttest[[1]]$p.value, 10)
+  ) %>% dplyr::select(-ttest)
 
 ## Run one-sample chi-squared variance test
 chisq_stat <- elev_df_var %>%
@@ -100,28 +123,28 @@ within_ci <- elev_df_var %>%
   )
 
 ## Plot histograms of the sample variance distribution along with the observed value and 95% CI.
-ggplot(elev_df_var, aes(x = sample_variances)) +
+ggplot(elev_rangediff, aes(x = elevational_range)) +
   geom_histogram(
-    data = subset(elev_df_var, replicate > 0),
-    bins = 30,
+    data = subset(elev_rangediff, replicate > 0),
+    bins = 20,
     fill = "grey80",
     colour = "grey50"
   ) +
-  geom_rect(
-    data = within_ci,
-    inherit.aes = FALSE,
-    aes(
-      xmin = ci_low,
-      xmax = ci_high,
-      ymin = 0,
-      ymax = Inf
-    ),
-    fill = "steelblue",
-    alpha = 0.3
-  ) +
+  # geom_rect(
+  #   data = within_ci,
+  #   inherit.aes = FALSE,
+  #   aes(
+  #     xmin = ci_low,
+  #     xmax = ci_high,
+  #     ymin = 0,
+  #     ymax = Inf
+  #   ),
+  #   fill = "steelblue",
+  #   alpha = 0.3
+  # ) +
   geom_vline(
-    data = subset(elev_df_var, replicate == 0),
-    aes(xintercept = sample_variances),
+    data = subset(elev_rangediff, replicate == 0),
+    aes(xintercept = elevational_range),
     colour = "red",
     linewidth = 0.8
   ) +
