@@ -14,10 +14,10 @@ rm(list=ls()); gc()
 # Download the datasets following instructions given on (ZENODO FILE)
 # Make sure the parent folder is called 'shieldtail_conservation'.
 wd <- list()
-wd$data <- "C:/Users/Anuj Shinde/My Drive/Papers/1-work-in-progress/shieldtail distributions/Animal Conservation/shieldtail_conservation/dataframes/"
-wd$shapefiles <- "C:/Users/Anuj Shinde/My Drive/Papers/1-work-in-progress/shieldtail distributions/Animal Conservation/shieldtail_conservation/shapefiles/"
-wd$rasters <- "C:/Users/Anuj Shinde/My Drive/Papers/1-work-in-progress/shieldtail distributions/Animal Conservation/shieldtail_conservation/rasters/"
-wd$output <- "C:/Users/Anuj Shinde/My Drive/Papers/1-work-in-progress/shieldtail distributions/Animal Conservation/shieldtail_conservation/output/"
+wd$data <- "XXX/shieldtail_conservation/dataframes/"
+wd$shapefiles <- "XXX/shieldtail_conservation/shapefiles/"
+wd$rasters <- "XXXX/shieldtail_conservation/rasters/"
+wd$output <- "XXXX/shieldtail_conservation/output/"
 
 ## Turn of 'sf' package's spherical geometry feature
 # This will assume planar geometry when running vector map functions.

@@ -1,4 +1,4 @@
-## Script 2: This chunk creates minimum convex polygons for the below listed 
+## Script 2: This script creates minimum convex polygons for the below listed 
 # 12 shieldtail species and also calculates a number of variables.
 
 # List of shieldtail species of interest.
