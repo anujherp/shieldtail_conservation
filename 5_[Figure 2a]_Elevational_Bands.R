@@ -45,26 +45,35 @@ for (i in seq_along(uro_rangemaps$species)) {
   
   rpts_thinned[[i]] <- r_sf # List with masked polygonal elevation points and geometry.
   
-  ## 3. Random sampling (1000 samples, each size = species count)
+  ## 3. Random sampling (100 samples, each size = species count)
   draw_n <- sum(pts$species == uro_rangemaps$species[i])
   
   rpts_draw[[i]] <- replicate( # List with sampled points and their geometry.
-    1000,
+    100,
     r_sf[sample(nrow(r_sf), draw_n, replace = T), ],
     simplify = FALSE
   )
   print(i)
 }
 
-# Convert the 1000 replicates of the random draw list to a dataframe with appropriate structure.
+# Convert the 100 replicates of the random draw list to a dataframe with appropriate structure.
 rpts_df <- rpts_draw %>% 
-  map(~ bind_rows(.x, .id = "replicate")) %>%   # bind 1000 replicate data.frames per species
+  map(~ bind_rows(.x, .id = "replicate")) %>%   # bind 100 replicate data.frames per species
   bind_rows(.id = "species") %>%
   mutate(replicate = as.numeric(replicate)) %>%
   dplyr::select(-geometry)
 
 ## Merge the raster points and observed occurrence points dataframe, with the `source` column as an identifier.
 elev_df <- bind_rows(rpts_df, pts) %>% 
+  mutate(source = case_when(replicate<1 ~ "point",
+                            replicate>0 ~ "polygon"))
+
+## To use all elevation points within a polygon. This is for plotting only.
+all_polygon_points <- rpts_thinned %>% 
+  bind_rows(.id = "species") %>% mutate(replicate = 1) %>%
+  dplyr::select(-geometry)
+
+nonsampled_df <- bind_rows(all_polygon_points, pts) %>%
   mutate(source = case_when(replicate<1 ~ "point",
                             replicate>0 ~ "polygon"))
 
@@ -76,10 +85,10 @@ levene_bootstrap_species <- function(df_species) {
   obs <- df_species %>% filter(source == "point")
   poly <- df_species %>% filter(source == "polygon")
   
-  # storage for 1000 tests
-  lev_stats <- vector("list", 1000)
+  # storage for 100 tests
+  lev_stats <- vector("list", 100)
   
-  for (i in 1:1000) {
+  for (i in 1:100) {
     
     poly_i <- poly %>% filter(replicate == i)
     
@@ -99,8 +108,7 @@ levene_bootstrap_species <- function(df_species) {
   # summary across 1000 replicates
   summary_row <- lev_df %>%
     summarise(mean_F = round(mean(F_value),3),
-              mean_p = round(mean(p_value),3),
-              prop_p_less_0.05 = round(mean(p_value < 0.05),3)) %>%
+              harmonic_mp = round(harmonicmeanp::hmp.stat(p_value),6)) %>%
     mutate(species = unique(df_species$species))
   
   return(summary_row)
@@ -115,15 +123,15 @@ levene_bootstrap_results <- elev_df %>%
 ## Plot a box and whiskers plot, with mean Levene's test P values 
 ## (Figure S2)
 elevation_box <- ggplot() +
-  geom_boxplot(data= elev_df, aes(x = species, y = elevation, fill = source),
+  geom_boxplot(data= nonsampled_df, aes(x = species, y = elevation, fill = source),
                outlier.size = 5, lwd = 2, coef = 2, show.legend = F) +
   labs(x = "Species",
        y = "Elevation [m]") +
   theme_bw(base_size = 70) +
   scale_x_discrete(guide = guide_axis(n.dodge = 2)) +
   geom_text(data = levene_bootstrap_results, 
-            aes(x = species, y = max(elev_df$elevation) + 10, 
-                label = paste("p =", round(mean_p, 3))),
+            aes(x = species, y = max(nonsampled_df$elevation) + 10, 
+                label = paste("p =", round(harmonic_mp, 4))),
             color = "maroon", size = 15) +
   theme(axis.text.x = element_text(face = "italic"))
 
