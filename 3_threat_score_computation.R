@@ -31,31 +31,3 @@ uro_threat_full <- uro_threat %>%
 
 # save this dataframe
 write_csv(uro_threat_full,paste0(wd$data,"uro_threat.csv"))
-
-## Sensitivity analyses: 1) Excl. Built Env. and 2) Excl. Non-Protected Area
-
-## 1) Compute threat score, excluding the Built Up Area Expansion parameter.
-
-uro_threat_wo_built <- uro_threat %>%
-  rowwise() %>%
-  mutate(threat_score = round(log_clust * tl_clust + log_clust * NPA_covp_clust, 3)) %>%
-  ungroup() %>%  # Always ungroup after rowwise
-  mutate(z_score = round((threat_score - mean(threat_score, na.rm = TRUE)) /
-                           sd(threat_score, na.rm = TRUE), 3),
-         threat_cat = case_when(z_score > 1 ~ "H",
-                                z_score < -1 ~ "L",
-                                z_score < 1 & z_score > -1 ~ "M")) %>%
-  dplyr::select(species, area_km, log_clust, NPA_covp_clust, tl_clust, threat_score, z_score, threat_cat)
-
-## 2) Compute threat score, excluding the Non-Protected Area Coverage parameter.
-
-uro_threat_wo_NPA <- uro_threat %>%
-  rowwise() %>%
-  mutate(threat_score = round(log_clust * built_clust + log_clust * tl_clust, 3)) %>%
-  ungroup() %>%  # Always ungroup after rowwise
-  mutate(z_score = round((threat_score - mean(threat_score, na.rm = TRUE)) /
-                           sd(threat_score, na.rm = TRUE), 3),
-         threat_cat = case_when(z_score > 1 ~ "H",
-                                z_score < -1 ~ "L",
-                                z_score < 1 & z_score > -1 ~ "M")) %>%
-  dplyr::select(species, area_km, log_clust, built_clust, tl_clust, threat_score, z_score, threat_cat)
